@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: timesheet-middleware
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    pythonVersion: 3.11.7
+    autoDeploy: true
