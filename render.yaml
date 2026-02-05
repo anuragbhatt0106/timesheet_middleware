@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: your-app-name
+    name: timesheet-middleware
     runtime: python
     pythonVersion: 3.10
     buildCommand: |
