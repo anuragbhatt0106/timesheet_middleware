@@ -1,4 +1,9 @@
-runtime: python
-pythonVersion: 3.10
-buildCommand: pip install --upgrade pip && pip install --prefer-binary -r requirements.txt
-startCommand: gunicorn app:app
+services:
+  - type: web
+    name: your-app-name
+    runtime: python
+    pythonVersion: 3.10
+    buildCommand: |
+      pip install --upgrade pip
+      pip install --prefer-binary -r requirements.txt
+    startCommand: gunicorn app:app
