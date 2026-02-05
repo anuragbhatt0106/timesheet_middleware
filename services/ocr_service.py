@@ -1,13 +1,10 @@
 import pytesseract
 from PIL import Image
-import cv2
-import numpy as np
-from pdf2image import convert_from_path
+import pdfplumber
 import re
 import os
 import tempfile
 from docx import Document
-import PyPDF2
 
 class OCRService:
     def __init__(self):
@@ -27,27 +24,16 @@ class OCRService:
     
     def _extract_from_pdf(self, file_path):
         try:
-            with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
+            with pdfplumber.open(file_path) as pdf:
                 text = ""
-                for page in pdf_reader.pages:
-                    text += page.extract_text()
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text
                 
                 hours = self._extract_hours_from_text(text)
                 if hours is not None:
                     return hours
-        except:
-            pass
-        
-        try:
-            images = convert_from_path(file_path)
-            for image in images:
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-                    image.save(tmp_file.name)
-                    hours = self._extract_from_image(tmp_file.name)
-                    os.unlink(tmp_file.name)
-                    if hours is not None:
-                        return hours
         except Exception as e:
             print(f"Error processing PDF: {e}")
         
@@ -55,14 +41,8 @@ class OCRService:
     
     def _extract_from_image(self, file_path):
         try:
-            image = cv2.imread(file_path)
-            if image is None:
-                return None
-            
-            processed_image = self._preprocess_image(image)
-            
-            text = pytesseract.image_to_string(processed_image)
-            
+            image = Image.open(file_path)
+            text = pytesseract.image_to_string(image)
             return self._extract_hours_from_text(text)
         except Exception as e:
             print(f"Error processing image: {e}")
@@ -86,17 +66,6 @@ class OCRService:
             print(f"Error processing Word document: {e}")
             return None
     
-    def _preprocess_image(self, image):
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        
-        gray = cv2.medianBlur(gray, 3)
-        
-        thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-        
-        kernel = np.ones((1,1), np.uint8)
-        processed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-        
-        return processed
     
     def _extract_hours_from_text(self, text):
         if not text:

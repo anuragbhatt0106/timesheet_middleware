@@ -1,4 +1,4 @@
-import pandas as pd
+import openpyxl
 import re
 
 class ExcelService:
@@ -10,70 +10,41 @@ class ExcelService:
             file_extension = file_path.split('.')[-1].lower()
             
             if file_extension == 'xlsx':
-                df = pd.read_excel(file_path, engine='openpyxl')
-            elif file_extension == 'xls':
-                df = pd.read_excel(file_path, engine='xlrd')
+                workbook = openpyxl.load_workbook(file_path)
+                worksheet = workbook.active
+                return self._extract_hours_from_worksheet(worksheet)
             else:
                 raise ValueError(f"Unsupported Excel file type: {file_extension}")
             
-            return self._extract_hours_from_dataframe(df)
         except Exception as e:
             print(f"Error processing Excel file: {e}")
             return None
     
-    def _extract_hours_from_dataframe(self, df):
-        if df.empty:
-            return None
-        
-        hours_columns = [
+    def _extract_hours_from_worksheet(self, worksheet):
+        hours_keywords = [
             'hours', 'total hours', 'hours worked', 'time', 'total time',
             'hrs', 'total hrs', 'duration', 'total', 'hours_worked',
             'total_hours', 'work_hours', 'logged_hours'
         ]
         
-        for col_name in hours_columns:
-            for column in df.columns:
-                if isinstance(column, str) and col_name.lower() in column.lower():
-                    hours_value = self._extract_numeric_from_column(df[column])
-                    if hours_value is not None:
-                        return hours_value
-        
-        for column in df.columns:
-            if df[column].dtype in ['float64', 'int64']:
-                hours_value = self._extract_numeric_from_column(df[column])
-                if hours_value is not None and 0 <= hours_value <= 168:
-                    return hours_value
-        
-        for column in df.columns:
-            hours_value = self._extract_hours_from_text_column(df[column])
-            if hours_value is not None:
-                return hours_value
-        
-        return None
-    
-    def _extract_numeric_from_column(self, column):
-        try:
-            numeric_values = pd.to_numeric(column, errors='coerce').dropna()
-            
-            if not numeric_values.empty:
-                for value in numeric_values:
-                    if 0 <= value <= 168:
-                        return float(value)
+        # Search through all cells
+        for row in worksheet.iter_rows():
+            for cell in row:
+                if cell.value is None:
+                    continue
+                    
+                # Check if it's a number in reasonable range
+                if isinstance(cell.value, (int, float)) and 0 <= cell.value <= 168:
+                    return float(cell.value)
                 
-                total_value = numeric_values.sum()
-                if 0 <= total_value <= 168:
-                    return float(total_value)
-        except:
-            pass
+                # Check if it's text that might contain hours
+                if isinstance(cell.value, str):
+                    hours = self._extract_hours_from_text(cell.value)
+                    if hours is not None:
+                        return hours
+        
         return None
     
-    def _extract_hours_from_text_column(self, column):
-        for value in column.dropna():
-            if isinstance(value, str):
-                hours = self._extract_hours_from_text(value)
-                if hours is not None:
-                    return hours
-        return None
     
     def _extract_hours_from_text(self, text):
         if not isinstance(text, str):
