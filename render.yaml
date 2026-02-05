@@ -1,10 +1,4 @@
-services:
-  - type: web
-    name: timesheet-middleware
-    env: python
-    runtime: python
-    pythonVersion: 3.11
-    buildCommand: pip install -r requirements.txt
-    startCommand: python app.py
-    region: singapore
-    plan: free
+runtime: python
+pythonVersion: 3.10
+buildCommand: pip install --upgrade pip && pip install --prefer-binary -r requirements.txt
+startCommand: gunicorn app:app
