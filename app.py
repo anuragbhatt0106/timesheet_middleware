@@ -4,6 +4,9 @@ import mimetypes
 from flask import Flask, jsonify, request
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
+from docx import Document
+import openpyxl
+from services.claude_service import ClaudeService
 
 # Load environment variables from .env file
 load_dotenv()
@@ -47,19 +50,66 @@ def get_file_type(filename):
     }
     return type_mapping.get(extension, 'unknown')
 
-def mock_extract_text(file_path, file_type):
-    """Mock text extraction - returns dummy content based on file type"""
-    mock_responses = {
-        'pdf': 'Mock text extracted from PDF: Employee worked 8 hours on project tasks including development and testing.',
-        'word': 'Mock text from Word document: Daily timesheet shows 8.5 hours of work completed on various assignments.',
-        'excel': 'Mock data from Excel: Total hours logged: 40 hours across 5 days with overtime calculations.',
-        'image': 'Mock OCR from image: Timesheet scan shows employee worked 7.5 hours with lunch break deducted.'
-    }
-    return mock_responses.get(file_type, 'Mock text extracted from uploaded file.')
+def extract_text_from_docx(file_path):
+    """Extract text from Word documents"""
+    try:
+        doc = Document(file_path)
+        text = ""
+        
+        # Extract paragraphs
+        for paragraph in doc.paragraphs:
+            text += paragraph.text + "\n"
+        
+        # Extract tables
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    text += cell.text + " "
+                text += "\n"
+        
+        return text.strip()
+    except Exception as e:
+        raise Exception(f"Failed to extract text from Word document: {str(e)}")
+
+def extract_text_from_xlsx(file_path):
+    """Extract text from Excel files"""
+    try:
+        workbook = openpyxl.load_workbook(file_path, data_only=True)
+        text = ""
+        
+        for sheet_name in workbook.sheetnames:
+            worksheet = workbook[sheet_name]
+            text += f"Sheet: {sheet_name}\n"
+            
+            for row in worksheet.iter_rows():
+                row_text = []
+                for cell in row:
+                    if cell.value is not None:
+                        row_text.append(str(cell.value))
+                if row_text:
+                    text += " ".join(row_text) + "\n"
+                    
+        return text.strip()
+    except Exception as e:
+        raise Exception(f"Failed to extract text from Excel file: {str(e)}")
+
+def calculate_match_status(extracted_hours, claimed_hours, confidence_score):
+    """Calculate match status based on variance and confidence"""
+    if confidence_score < 0.7:
+        return "Low Confidence"
+    
+    variance = abs(extracted_hours - claimed_hours)
+    
+    if variance <= 0.5:
+        return "Match"
+    elif variance <= 2.0:
+        return "Minor Mismatch"
+    else:
+        return "Mismatch"
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
-    """Handle file upload and return mock processing results"""
+    """Handle file upload and process with Claude AI"""
     try:
         # Check if file is present in request
         if 'file' not in request.files:
@@ -80,8 +130,17 @@ def upload_file():
             }), 400
         
         # Get optional parameters
-        file_type_param = request.form.get('file_type', '').lower()
-        claimed_hours = request.form.get('claimed_hours', '0')
+        claimed_hours_str = request.form.get('claimed_hours')
+        claimed_hours = None
+        if claimed_hours_str:
+            try:
+                claimed_hours = float(claimed_hours_str)
+            except ValueError:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid claimed_hours',
+                    'message': 'claimed_hours must be a valid number'
+                }), 400
         
         # Validate file type
         if not allowed_file(file.filename):
@@ -95,31 +154,82 @@ def upload_file():
         # Secure the filename
         filename = secure_filename(file.filename)
         detected_file_type = get_file_type(filename)
+        file_extension = filename.rsplit('.', 1)[1].lower()
         
-        # Use provided file_type or detected one
-        final_file_type = file_type_param if file_type_param in ['pdf', 'word', 'excel', 'image'] else detected_file_type
+        # Initialize Claude service
+        claude_service = ClaudeService()
         
-        # Create temporary file to simulate processing
+        # Create temporary file for processing
         with tempfile.NamedTemporaryFile(delete=False, suffix=f'_{filename}') as tmp_file:
             try:
                 # Save uploaded file temporarily
                 file.save(tmp_file.name)
                 file_size = os.path.getsize(tmp_file.name)
                 
-                # Mock text extraction
-                extracted_text = mock_extract_text(tmp_file.name, final_file_type)
+                # Process file based on type
+                claude_result = None
                 
-                # Simulate processing success
+                if file_extension in ['pdf', 'png', 'jpg', 'jpeg']:
+                    # Read file bytes and send directly to Claude
+                    with open(tmp_file.name, 'rb') as f:
+                        file_bytes = f.read()
+                    claude_result = claude_service.extract_timesheet_data(file_bytes, file_extension)
+                    
+                elif file_extension == 'docx':
+                    # Extract text from Word document and send to Claude
+                    try:
+                        extracted_text = extract_text_from_docx(tmp_file.name)
+                        claude_result = claude_service.extract_from_text(extracted_text)
+                    except Exception as e:
+                        claude_result = {
+                            'extracted_hours': 0,
+                            'confidence_score': 0.0,
+                            'summary': f'Error extracting from Word document: {str(e)}',
+                            'daily_breakdown': [],
+                            'anomalies': ['Word document processing failed']
+                        }
+                        
+                elif file_extension == 'xlsx':
+                    # Extract text from Excel file and send to Claude
+                    try:
+                        extracted_text = extract_text_from_xlsx(tmp_file.name)
+                        claude_result = claude_service.extract_from_text(extracted_text)
+                    except Exception as e:
+                        claude_result = {
+                            'extracted_hours': 0,
+                            'confidence_score': 0.0,
+                            'summary': f'Error extracting from Excel file: {str(e)}',
+                            'daily_breakdown': [],
+                            'anomalies': ['Excel file processing failed']
+                        }
+                
+                # Build response data
                 response_data = {
                     'success': True,
                     'file_name': filename,
-                    'file_type': final_file_type,
+                    'file_type': detected_file_type,
                     'file_size_bytes': file_size,
-                    'claimed_hours': claimed_hours,
-                    'extracted_text': extracted_text,
-                    'processing_time_ms': 150,  # Mock processing time
-                    'timestamp': os.getenv('REQUEST_ID', 'mock-timestamp')
+                    'extracted_hours': claude_result['extracted_hours'],
+                    'confidence_score': claude_result['confidence_score'],
+                    'summary': claude_result['summary'],
+                    'daily_breakdown': claude_result['daily_breakdown'],
+                    'anomalies': claude_result['anomalies']
                 }
+                
+                # Add match status if claimed_hours provided
+                if claimed_hours is not None:
+                    match_status = calculate_match_status(
+                        claude_result['extracted_hours'], 
+                        claimed_hours, 
+                        claude_result['confidence_score']
+                    )
+                    variance = abs(claude_result['extracted_hours'] - claimed_hours)
+                    
+                    response_data.update({
+                        'claimed_hours': claimed_hours,
+                        'match_status': match_status,
+                        'variance': variance
+                    })
                 
                 return jsonify(response_data), 200
                 
