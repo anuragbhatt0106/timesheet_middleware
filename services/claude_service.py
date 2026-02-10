@@ -84,7 +84,13 @@ If no clear time data is found, set extracted_hours to 0 and confidence_score to
                 }]
             )
             
-            response_text = message.content[0].text.strip()
+            response_text = message.content[0].text
+            # Strip markdown code blocks if present
+            if response_text.startswith('```'):
+                response_text = response_text.strip('`')
+                if response_text.startswith('json'):
+                    response_text = response_text[4:]
+                response_text = response_text.strip()
             
             try:
                 result = json.loads(response_text)
@@ -158,7 +164,13 @@ If no clear time data is found, set extracted_hours to 0 and confidence_score to
                 }]
             )
             
-            response_text = message.content[0].text.strip()
+            response_text = message.content[0].text
+            # Strip markdown code blocks if present
+            if response_text.startswith('```'):
+                response_text = response_text.strip('`')
+                if response_text.startswith('json'):
+                    response_text = response_text[4:]
+                response_text = response_text.strip()
             
             try:
                 result = json.loads(response_text)
