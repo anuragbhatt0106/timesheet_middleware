@@ -34,7 +34,7 @@ class ClaudeService:
             }
             media_type = media_type_map.get(file_type.lower(), 'application/octet-stream')
             
-            prompt = """Analyze this timesheet document and extract detailed time tracking information. 
+            prompt = """Analyze this timesheet document and extract detailed time tracking information.
 
 Return ONLY a valid JSON object with the following exact structure:
 {
@@ -44,13 +44,17 @@ Return ONLY a valid JSON object with the following exact structure:
     "daily_breakdown": [
         {
             "date": "<YYYY-MM-DD_or_day_of_week>",
-            "start_time": "<HH:MM_or_null>", 
+            "start_time": "<HH:MM_or_null>",
             "end_time": "<HH:MM_or_null>",
             "hours": <hours_as_number>,
             "notes": "<task_description_or_project>"
         }
     ],
-    "anomalies": ["<any_unusual_patterns_or_issues>"]
+    "anomalies": ["<any_unusual_patterns_or_issues>"],
+    "approval_status": "<Approved/Pending/Not Found - check if document shows manager approval>",
+    "approver_name": "<name of approver if visible in document, else null>",
+    "resource_name": "<name of the employee/consultant if found, else null>",
+    "period": "<month/period covered e.g. January 2026, else null>"
 }
 
 Look for:
@@ -59,6 +63,9 @@ Look for:
 - Project names, task descriptions
 - Any inconsistencies or unusual patterns
 - Time formats like 8:00 AM - 5:00 PM or decimal hours
+- Manager/supervisor approval status and approver name
+- Employee/consultant/resource name
+- The time period or month the timesheet covers
 
 If no clear time data is found, set extracted_hours to 0 and confidence_score to 0.1."""
 
@@ -137,21 +144,28 @@ Return ONLY a valid JSON object with the following exact structure:
     "daily_breakdown": [
         {{
             "date": "<YYYY-MM-DD_or_day_of_week>",
-            "start_time": "<HH:MM_or_null>", 
+            "start_time": "<HH:MM_or_null>",
             "end_time": "<HH:MM_or_null>",
             "hours": <hours_as_number>,
             "notes": "<task_description_or_project>"
         }}
     ],
-    "anomalies": ["<any_unusual_patterns_or_issues>"]
+    "anomalies": ["<any_unusual_patterns_or_issues>"],
+    "approval_status": "<Approved/Pending/Not Found - check if document shows manager approval>",
+    "approver_name": "<name of approver if visible in document, else null>",
+    "resource_name": "<name of the employee/consultant if found, else null>",
+    "period": "<month/period covered e.g. January 2026, else null>"
 }}
 
 Look for:
 - Total hours worked (main focus)
-- Daily time entries with start/end times  
+- Daily time entries with start/end times
 - Project names, task descriptions
 - Any inconsistencies or unusual patterns
 - Time formats like 8:00 AM - 5:00 PM or decimal hours
+- Manager/supervisor approval status and approver name
+- Employee/consultant/resource name
+- The time period or month the timesheet covers
 
 If no clear time data is found, set extracted_hours to 0 and confidence_score to 0.1."""
 
@@ -202,7 +216,11 @@ If no clear time data is found, set extracted_hours to 0 and confidence_score to
                 "confidence_score": max(0.0, min(1.0, float(result.get("confidence_score", 0)))),
                 "summary": str(result.get("summary", "No summary provided")),
                 "daily_breakdown": [],
-                "anomalies": []
+                "anomalies": [],
+                "approval_status": result.get("approval_status"),
+                "approver_name": result.get("approver_name"),
+                "resource_name": result.get("resource_name"),
+                "period": result.get("period")
             }
             
             # Validate daily_breakdown

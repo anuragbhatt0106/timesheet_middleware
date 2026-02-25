@@ -4,3 +4,4 @@ python-dotenv==1.0.0
 anthropic
 python-docx
 openpyxl
+boto3
