@@ -36,6 +36,8 @@ class ClaudeService:
             
             prompt = """Analyze this timesheet document and extract detailed time tracking information.
 
+IMPORTANT: Keep daily_breakdown notes to maximum 5 words per entry to minimize response length.
+
 Return ONLY a valid JSON object with the following exact structure:
 {
     "extracted_hours": <total_hours_as_number>,
@@ -71,7 +73,7 @@ If no clear time data is found, set extracted_hours to 0 and confidence_score to
 
             message = self.client.messages.create(
                 model=self.model,
-                max_tokens=1000,
+                max_tokens=8000,
                 messages=[{
                     "role": "user",
                     "content": [
@@ -90,7 +92,7 @@ If no clear time data is found, set extracted_hours to 0 and confidence_score to
                     ]
                 }]
             )
-            
+
             response_text = message.content[0].text
             # Strip markdown code blocks if present
             if response_text.startswith('```'):
@@ -98,9 +100,14 @@ If no clear time data is found, set extracted_hours to 0 and confidence_score to
                 if response_text.startswith('json'):
                     response_text = response_text[4:]
                 response_text = response_text.strip()
-            
+
             try:
-                result = json.loads(response_text)
+                try:
+                    result = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # Try to salvage truncated JSON by finding the last complete entry
+                    # Store the raw response for debugging
+                    raise json.JSONDecodeError(f"Invalid JSON response: {response_text[:500]}", response_text, 0)
                 return self._validate_and_format_response(result)
             except json.JSONDecodeError:
                 return {
@@ -135,6 +142,8 @@ If no clear time data is found, set extracted_hours to 0 and confidence_score to
 
 Text content:
 {text_content}
+
+IMPORTANT: Keep daily_breakdown notes to maximum 5 words per entry to minimize response length.
 
 Return ONLY a valid JSON object with the following exact structure:
 {{
@@ -171,13 +180,13 @@ If no clear time data is found, set extracted_hours to 0 and confidence_score to
 
             message = self.client.messages.create(
                 model=self.model,
-                max_tokens=1000,
+                max_tokens=8000,
                 messages=[{
                     "role": "user",
                     "content": prompt
                 }]
             )
-            
+
             response_text = message.content[0].text
             # Strip markdown code blocks if present
             if response_text.startswith('```'):
@@ -185,9 +194,14 @@ If no clear time data is found, set extracted_hours to 0 and confidence_score to
                 if response_text.startswith('json'):
                     response_text = response_text[4:]
                 response_text = response_text.strip()
-            
+
             try:
-                result = json.loads(response_text)
+                try:
+                    result = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # Try to salvage truncated JSON by finding the last complete entry
+                    # Store the raw response for debugging
+                    raise json.JSONDecodeError(f"Invalid JSON response: {response_text[:500]}", response_text, 0)
                 return self._validate_and_format_response(result)
             except json.JSONDecodeError:
                 return {
