@@ -26,7 +26,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 AWS_S3_BUCKET = os.environ.get('AWS_S3_BUCKET', 'saasverse-timesheet-files')
-AWS_S3_REGION = os.environ.get('AWS_S3_REGION', 'ap-south-1')
+AWS_S3_REGION = os.environ.get('AWS_S3_REGION', 'ap-southeast-2')
 
 # Initialize S3 client only if credentials are available
 s3_client = None
